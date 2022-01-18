@@ -1,23 +1,36 @@
 import datetime
 import os
 
+import discord
+from discord.commands import slash_command
 from discord.ext import commands
 
+from database import Database
 
-class Uno(commands.Cog):
+guild_ids = [499222173177872403]
+owner_ids = [303544964174970882]
+
+class Scs(commands.Cog):
     def __init__(self, bot):
         # self.relative_path = "/home/jubuntu/Quadbot"
         self.relative_path = "./"
         self.bot = bot
-        self.prefix = "*"
-        self.bot_log_file = os.path.join(self.get_log_dir(), "uno.log")
-        self.uno_game_counter = 0
-        self.uno_games = {}
-        self.uno_cards = ["r0", "r1", "r1", "r2", "r2", "r3", "r3", "r4", "r4", "r5", "r5", "r6", "r6", "r7", "r7", "r8", "r8", "r9", "r9", "r+2", "r+2", "rreverse", "rreverse", "rskip", "rskip",
-                          "y0", "y1", "y1", "y2", "y2", "y3", "y3", "y4", "y4", "y5", "y5", "y6", "y6", "y7", "y7", "y8", "y8", "y9", "y9", "y+2", "y+2", "yreverse", "yreverse", "yskip", "yskip",
-                          "g0", "g1", "g1", "g2", "g2", "g3", "g3", "g4", "g4", "g5", "g5", "g6", "g6", "g7", "g7", "g8", "g8", "g9", "g9", "g+2", "g+2", "greverse", "greverse", "gskip", "gskip",
-                          "b0", "b1", "b1", "b2", "b2", "b3", "b3", "b4", "b4", "b5", "b5", "b6", "b6", "b7", "b7", "b8", "b8", "b9", "b9", "b+2", "b+2", "breverse", "rreverse", "bskip", "bskip",
-                          "cchoose", "cchoose", "cchoose", "cchoose", "c+4", "c+4", "c+4", "c+4"]
+        self.database = Database(db_folder_path='db', db_file_name='scs.db')
+        self.bot_log_file = os.path.join(self.get_log_dir(), "scs.log")
+
+    def get_embed(self, title, description=None, type=None):
+        if type == "info":
+            embed = discord.Embed(title=title, description=description, color=discord.Color.og_blurple())
+        elif type == "success":
+            embed = discord.Embed(title=title, description=description, color=discord.Color.green())
+        elif type == "warning":
+            embed = discord.Embed(title=title, description=description, color=discord.Color.orange())
+        elif type == "error":
+            embed = discord.Embed(title=title, description=description, color=discord.Color.red())
+        else:
+            embed = discord.Embed(title=title, description=description)
+
+        return embed
 
     def get_log_dir(self):
         current_folder_name = []
@@ -59,13 +72,33 @@ class Uno(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         self.write_log("INFO", "scs.py", "Cog SCS is ready.", True)
+        self.check_members()
+
+    def check_members(self):
+        for guild in self.bot.guilds:
+            for member in guild.members:
+                if self.database.get_member(member.id) is None:
+                    self.database.create_member(member.id)
 
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author == self.bot.user:
             return
 
+        print(message)
+
         await self.bot.process_commands(message)
+
+    @slash_command(guild_ids=guild_ids, description="Deletes messages.")
+    @discord.commands.option("amount", int, description="The amount of messages you want to delete.")
+    @discord.commands.option("channel", discord.TextChannel, description="The channel in which you want to delete the messages.", required=False)
+    async def purge(self, ctx, amount: int, channel: discord.TextChannel):
+        if channel is None:
+            channel = ctx.channel
+
+        deleted = await channel.purge(limit=amount)
+
+        await ctx.respond(embed=self.get_embed(title=f'Deleted {len(deleted)} message(s)', type="success"))
 
     def get_member_by_id(self, member_id):
         guild = ""
@@ -76,4 +109,4 @@ class Uno(commands.Cog):
 
 
 def setup(bot):
-    bot.add_cog(Uno(bot))
+    bot.add_cog(Scs(bot))
