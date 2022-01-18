@@ -40,7 +40,8 @@ async def on_application_command_error(ctx, error):
     raise error
 
 
-@bot.slash_command(guild_ids=guild_ids)
+@bot.slash_command(guild_ids=guild_ids, description="Load an extension.")
+@discord.commands.option("extension", str, description="The extension you want to load.")
 async def load(ctx, extension: str):
     if ctx.author.id in owner_ids:
         bot.load_extension(f'cogs.{extension}')
@@ -51,7 +52,8 @@ async def load(ctx, extension: str):
         await ctx.respond("Sorry, you don't have the permission to do this :/")
 
 
-@bot.slash_command(guild_ids=guild_ids)
+@bot.slash_command(guild_ids=guild_ids, description="Unload an extension.")
+@discord.commands.option("extension", str, description="The extension you want to unload.")
 async def unload(ctx, extension: str):
     if ctx.author.id in owner_ids:
         bot.unload_extension(f'cogs.{extension}')
@@ -62,7 +64,8 @@ async def unload(ctx, extension: str):
         await ctx.respond("Sorry, you don't have the permission to do this :/")
 
 
-@bot.slash_command(guild_ids=guild_ids)
+@bot.slash_command(guild_ids=guild_ids, description="Reload an extension.")
+@discord.commands.option("extension", str, description="The extension you want to reload.")
 async def reload(ctx, extension: str):
     if ctx.author.id in owner_ids:
         bot.unload_extension(f'cogs.{extension}')
