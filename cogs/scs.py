@@ -4,7 +4,8 @@ import re
 
 import discord
 from discord.commands import slash_command
-from discord.ext import commands, pages
+from discord.ext import commands, pages, tasks
+from discord.ext.commands import has_permissions
 
 from database import Database
 
@@ -74,6 +75,8 @@ class Scs(commands.Cog):
     async def on_ready(self):
         self.write_log("INFO", "scs.py", "Cog SCS is ready.", True)
         self.check_members()
+        self.check_last_point_change.start()
+        self.check_voice_channels.start()
 
     def check_members(self):
         for guild in self.bot.guilds:
@@ -99,8 +102,14 @@ class Scs(commands.Cog):
 
         rows = self.database.get_messages_from_today(message.author.id)
         if len(rows) <= 10:
-            new_score = current_score + 15000
+            if current_score < 0:
+                add_amount = 7500
+            else:
+                add_amount = 15000
+            new_score = current_score + add_amount
             self.database.set_score(message.author.id, new_score)
+            self.database.set_last_gained(message.author.id)
+            self.database.set_punished(message.author.id, 0)
 
         await self.bot.process_commands(message)
 
@@ -137,6 +146,58 @@ class Scs(commands.Cog):
     def format_number(self, n):
         return re.sub(r'(?<!^)(?=(\d{3})+$)', r'.', str(n))
 
+    @tasks.loop(hours=24)
+    async def check_last_point_change(self):
+        print("Checking last point change for all members...")
+        for guild in self.bot.guilds:
+            for member in enumerate(guild.members):
+                print(member[0])
+                member = member[1]
+                db_member = self.database.get_member(member.id)
+                if db_member is None:
+                    self.database.create_member(member.id)
+                    db_member = self.database.get_member(member.id)
+
+                current_score = db_member[1]
+
+                if self.database.check_inactive(member.id):
+                    print(db_member[3])
+                    if not db_member[3]:
+                        new_score = current_score - 350000
+                    else:
+                        new_score = current_score - 200000
+
+                    self.database.set_score(member.id, new_score)
+                    self.database.set_punished(member.id, 1)
+
+        print("Finished")
+
+    @tasks.loop(minutes=1)
+    async def check_voice_channels(self):
+        print("Checking voice channels...")
+        for guild in self.bot.guilds:
+            for channel in guild.channels:
+                if type(channel) is discord.channel.VoiceChannel:
+                    for member in channel.members:
+                        db_member = self.database.get_member(member.id)
+                        if db_member is None:
+                            self.database.create_member(member.id)
+                            db_member = self.database.get_member(member.id)
+
+                        current_score = db_member[1]
+
+                        if current_score < 0:
+                            add_amount = 1500
+                        else:
+                            add_amount = 3000
+
+                        new_score = current_score + add_amount
+
+                        self.database.set_score(member.id, new_score)
+                        self.database.set_last_gained(member.id)
+                        self.database.set_punished(member.id, 0)
+        print("Finished")
+
     @slash_command(guild_ids=guild_ids, description="Shows the social credit score of a person.")
     @discord.commands.option("member", discord.Member, description="The person you want to see the social credit score of.")
     async def show(self, ctx, member: discord.Member):
@@ -153,6 +214,7 @@ class Scs(commands.Cog):
     @discord.commands.option("member", discord.Member, description="The person you want to set the social credit score of.")
     @discord.commands.option("amount", int, description="The amount of social credit score you want the person to have.")
     @discord.commands.option("reason", str, description="The reason of the social credit score change.", required=False)
+    @has_permissions(administrator=True)
     async def set(self, ctx, member: discord.Member, amount: int, reason: str):
 
         if self.database.get_member(member.id) is None:
@@ -176,9 +238,15 @@ class Scs(commands.Cog):
         current_score = db_member[1]
 
         if not self.database.collected_daily(ctx.author.id):
-            new_score = current_score + 150000
+            if current_score < 0:
+                add_amount = 75000
+            else:
+                add_amount = 150000
+            new_score = current_score + add_amount
             self.database.set_score(ctx.author.id, new_score)
             self.database.set_daily(ctx.author.id)
+            self.database.set_last_gained(ctx.author.id)
+            self.database.set_punished(ctx.author.id, 0)
 
             await ctx.respond(embed=self.get_embed(title=f"You collected your daily bonus of 150.000.", description=f"Your social credit score is now at {self.format_number(new_score)}", type="info"))
         else:
@@ -188,6 +256,7 @@ class Scs(commands.Cog):
     @discord.commands.option("member", discord.Member, description="The person you want to remove social credit score from.")
     @discord.commands.option("amount", int, description="The amount of social credit score you want to remove from the person.")
     @discord.commands.option("reason", str, description="The reason of the social credit score reduction.", required=False)
+    @has_permissions(administrator=True)
     async def remove(self, ctx, member: discord.Member, amount: int, reason: str):
         db_member = self.database.get_member(member.id)
         if db_member is None:
@@ -207,6 +276,7 @@ class Scs(commands.Cog):
     @discord.commands.option("member", discord.Member, description="The person you want to give social credit score to.")
     @discord.commands.option("amount", int, description="The amount of social credit score you want to give to the person.")
     @discord.commands.option("reason", str, description="The reason of the social credit score addition.", required=False)
+    @has_permissions(administrator=True)
     async def give(self, ctx, member: discord.Member, amount: int, reason: str):
         db_member = self.database.get_member(member.id)
         if db_member is None:
@@ -239,15 +309,15 @@ class Scs(commands.Cog):
         page_counter = 1
         entry_counter = 1
         all_counter = 1
-        leaderboard_page = self.get_embed(title=f'Leaderboard - Page {page_counter}')
+        leaderboard_page = self.get_embed(title=f'Leaderboard | Page {page_counter}')
         leaderboard_page.description = ''
         for row in rows:
             member = self.get_member_by_id(row[0])
-            leaderboard_page.description += f"{get_medal(all_counter)} - {self.format_number(row[1])} - {member.mention}\n"
+            leaderboard_page.description += f"{get_medal(all_counter)} | {self.format_number(row[1])} | {member.mention}\n"
             if entry_counter >= 15:
                 page_counter += 1
                 leaderboard_pages.append(leaderboard_page)
-                leaderboard_page = self.get_embed(title=f'Leaderboard - Page {page_counter}')
+                leaderboard_page = self.get_embed(title=f'Leaderboard | Page {page_counter}')
                 leaderboard_page.description = ''
                 entry_counter = 1
             else:
@@ -263,6 +333,7 @@ class Scs(commands.Cog):
     @slash_command(guild_ids=guild_ids, description="Deletes messages.")
     @discord.commands.option("amount", int, description="The amount of messages you want to delete.")
     @discord.commands.option("channel", discord.TextChannel, description="The channel in which you want to delete the messages.", required=False)
+    @has_permissions(administrator=True)
     async def purge(self, ctx, amount: int, channel: discord.TextChannel):
         if channel is None:
             channel = ctx.channel
