@@ -21,20 +21,38 @@ async def on_ready():
     write_log("INFO", "bot.py", "Bot is ready.", True)
 
 
+def get_embed(title, description=None, type=None):
+    if type == "info":
+        embed = discord.Embed(title=title, description=description, color=discord.Color.og_blurple())
+    elif type == "success":
+        embed = discord.Embed(title=title, description=description, color=discord.Color.green())
+    elif type == "warning":
+        embed = discord.Embed(title=title, description=description, color=discord.Color.orange())
+    elif type == "error":
+        embed = discord.Embed(title=title, description=description, color=discord.Color.red())
+    else:
+        embed = discord.Embed(title=title, description=description)
+
+    return embed
+
 @bot.event
 async def on_application_command_error(ctx, error):
     await ctx.defer()
-    if isinstance(error.original, discord.ExtensionNotFound):
-        # write_log("WARNING", "bot.py", f"{ctx.author.name}#{ctx.author.discriminator} tried to use an extension (" + str(ctx.message.content).split(" ")[1] + ") that doesn't exist.", True)
-        await ctx.respond(f"The Extension does not exist.")
-        return
-    if isinstance(error.original, discord.ExtensionNotLoaded):
-        # write_log("WARNING", "bot.py", f"{ctx.author.name}#{ctx.author.discriminator} tried to use an extension (" + str(ctx.message.content).split(" ")[1] + ") that isn't loaded.", True)
-        await ctx.respond("The specified extension is not loaded.")
-        return
-    if isinstance(error.original, discord.ExtensionAlreadyLoaded):
-        # write_log("WARNING", "bot.py", f"{ctx.author.name}#{ctx.author.discriminator} tried to load an extension (" + str(ctx.message.content).split(" ")[1] + ") that is already loaded.", True)
-        await ctx.respond(f"The specified extension is already loaded.")
+    try:
+        if isinstance(error.original, discord.ExtensionNotFound):
+            # write_log("WARNING", "bot.py", f"{ctx.author.name}#{ctx.author.discriminator} tried to use an extension (" + str(ctx.message.content).split(" ")[1] + ") that doesn't exist.", True)
+            await ctx.respond(f"The Extension does not exist.")
+            return
+        if isinstance(error.original, discord.ExtensionNotLoaded):
+            # write_log("WARNING", "bot.py", f"{ctx.author.name}#{ctx.author.discriminator} tried to use an extension (" + str(ctx.message.content).split(" ")[1] + ") that isn't loaded.", True)
+            await ctx.respond("The specified extension is not loaded.")
+            return
+        if isinstance(error.original, discord.ExtensionAlreadyLoaded):
+            # write_log("WARNING", "bot.py", f"{ctx.author.name}#{ctx.author.discriminator} tried to load an extension (" + str(ctx.message.content).split(" ")[1] + ") that is already loaded.", True)
+            await ctx.respond(f"The specified extension is already loaded.")
+            return
+    except:
+        await ctx.respond(embed=get_embed(title=error, type="error"))
         return
 
     raise error
