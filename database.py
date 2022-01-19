@@ -3,6 +3,7 @@ import os
 import sqlite3
 from sqlite3 import Error
 
+
 class Database:
     def __init__(self, db_folder_path, db_file_name):
         self.db_folder_path = db_folder_path
@@ -37,6 +38,35 @@ class Database:
         cursor = conn.cursor()
         cursor.execute(sql, (datetime.datetime.now(), member_id))
         conn.commit()
+
+    def set_punished(self, member_id, punished):
+        sql = "UPDATE scores SET punished = ? WHERE id = ?"
+
+        conn = self.connect()
+
+        cursor = conn.cursor()
+        cursor.execute(sql, (punished, member_id))
+        conn.commit()
+
+    def check_inactive(self, member_id):
+        sql = "SELECT last_gained FROM scores WHERE id = ?"
+
+        conn = self.connect()
+
+        cursor = conn.cursor()
+        cursor.execute(sql, (member_id,))
+
+        row = cursor.fetchone()
+
+        print(row)
+
+        time_between_insertion = datetime.datetime.now() - datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S.%f')
+
+        if time_between_insertion > datetime.timedelta(weeks=1):
+            return True
+        else:
+            return False
+
 
     def collected_daily(self, member_id):
         sql = "SELECT daily FROM scores WHERE id = ? AND CAST(daily AS DATE) = CAST( date('now') AS DATE)"
@@ -75,13 +105,22 @@ class Database:
 
         return rows
 
-    def create_member(self, member_id):
-        sql = "INSERT INTO scores (id, score) VALUES (?, ?)"
+    def set_last_gained(self, member_id):
+        sql = "UPDATE scores SET last_gained = ? WHERE id = ?"
 
         conn = self.connect()
 
         cursor = conn.cursor()
-        cursor.execute(sql, (member_id, 0))
+        cursor.execute(sql, (datetime.datetime.now(), member_id))
+        conn.commit()
+
+    def create_member(self, member_id):
+        sql = "INSERT INTO scores (id, score, punished, last_gained) VALUES (?, ?, ?, ?)"
+
+        conn = self.connect()
+
+        cursor = conn.cursor()
+        cursor.execute(sql, (member_id, 0, 0, datetime.datetime.now()))
         conn.commit()
 
     def set_score(self, member_id, score):
@@ -128,7 +167,9 @@ class Database:
         CREATE TABLE IF NOT EXISTS scores (
             id varchar PRIMARY KEY,
             score int,
-            daily timestamp             
+            daily timestamp,
+            punished boolean,
+            last_gained timestamp             
         ); """
 
         sql_create_messages_table = """
